@@ -36,7 +36,8 @@ RUN composer install --no-interaction --no-dev --optimize-autoloader
 RUN php artisan key:generate
 
 # Set permissions
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 755 /var/www/html \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Configure Apache
@@ -52,6 +53,9 @@ RUN mkdir -p /var/www/html/database \
 
 # Run migrations
 RUN php artisan migrate --force
+
+# Create storage link
+RUN php artisan storage:link
 
 # Expose port 80
 EXPOSE 80
