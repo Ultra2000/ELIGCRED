@@ -50,7 +50,7 @@ RUN mkdir -p /var/www/html/database \
     && chmod -R 775 /var/www/html/database
 
 # Run migrations
-RUN php artisan migrate --force
+RUN php artisan migrate:fresh --force
 
 # Expose port 80
 EXPOSE 80
