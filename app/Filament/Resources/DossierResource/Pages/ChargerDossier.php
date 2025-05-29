@@ -120,7 +120,7 @@ class ChargerDossier extends Page
 
         $montantSollicite = (float)$montantSollicite;
         Log::info('Montant sollicité final : ' . $montantSollicite);
-
+        
         // Gestion des valeurs manquantes pour la durée et la périodicité
         $dureeSollicitee = $worksheet->getCell('C13')->getValue();
         Log::info('Valeur brute de la durée sollicitée : ' . print_r($dureeSollicitee, true));
