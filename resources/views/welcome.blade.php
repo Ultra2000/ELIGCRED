@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\Route;
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
         <!-- Scripts -->
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
-        <style>
+            @vite(['resources/css/app.css', 'resources/js/app.js'])
+            <style>
             .gradient {
                 background: linear-gradient(90deg, #1a365d 0%, #2c5282 100%);
             }
@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Route;
             .feature-card:hover {
                 transform: translateY(-5px);
             }
-        </style>
+            </style>
     </head>
     <body class="antialiased">
         <!-- Navigation -->
