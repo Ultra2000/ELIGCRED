@@ -37,7 +37,8 @@ RUN php artisan key:generate
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 /var/www/html \
+    && find /var/www/html -type f -exec chmod 644 {} \; \
+    && find /var/www/html -type d -exec chmod 755 {} \; \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Configure Apache
@@ -57,8 +58,11 @@ RUN php artisan migrate --force
 # Create storage link
 RUN php artisan storage:link
 
+# Verify public directory
+RUN ls -la /var/www/html/public
+
 # Expose port 80
 EXPOSE 80
 
-# Start Apache
+# Start Apache with debug output
 CMD ["apache2-foreground"] 
