@@ -35,6 +35,9 @@ RUN composer install --no-interaction --no-dev --optimize-autoloader
 # Generate key
 RUN php artisan key:generate
 
+# Create a simple index.html for healthcheck
+RUN echo '<!DOCTYPE html><html><head><title>OK</title></head><body>OK</body></html>' > /var/www/html/public/index.html
+
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html \
     && find /var/www/html -type f -exec chmod 644 {} \; \
@@ -58,11 +61,18 @@ RUN php artisan migrate --force
 # Create storage link
 RUN php artisan storage:link
 
-# Verify public directory
-RUN ls -la /var/www/html/public
+# Verify permissions and content
+RUN echo "=== Permissions for /var/www/html ===" \
+    && ls -la /var/www/html \
+    && echo "=== Permissions for /var/www/html/public ===" \
+    && ls -la /var/www/html/public \
+    && echo "=== Content of index.html ===" \
+    && cat /var/www/html/public/index.html \
+    && echo "=== Apache user and group ===" \
+    && id www-data
 
 # Expose port 80
 EXPOSE 80
 
-# Start Apache with debug output
+# Start Apache
 CMD ["apache2-foreground"] 
