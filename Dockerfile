@@ -23,20 +23,20 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy existing application directory
+# Copy composer files first for better caching
+COPY composer.json composer.lock ./
+
+# Install dependencies
+RUN composer install --no-interaction --no-dev --optimize-autoloader
+
+# Copy the rest of the application
 COPY . .
 
 # Copy .env file
 COPY .env.example .env
 
-# Install dependencies
-RUN composer install --no-interaction --no-dev --optimize-autoloader
-
 # Generate key
 RUN php artisan key:generate
-
-# Create a simple index.html for healthcheck
-RUN echo '<!DOCTYPE html><html><head><title>OK</title></head><body>OK</body></html>' > /var/www/html/public/index.html
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html \
@@ -55,21 +55,11 @@ RUN mkdir -p /var/www/html/database \
     && chown -R www-data:www-data /var/www/html/database \
     && chmod -R 775 /var/www/html/database
 
-# Run migrations
-RUN php artisan migrate --force
-
 # Create storage link
 RUN php artisan storage:link
 
-# Verify permissions and content
-RUN echo "=== Permissions for /var/www/html ===" \
-    && ls -la /var/www/html \
-    && echo "=== Permissions for /var/www/html/public ===" \
-    && ls -la /var/www/html/public \
-    && echo "=== Content of index.html ===" \
-    && cat /var/www/html/public/index.html \
-    && echo "=== Apache user and group ===" \
-    && id www-data
+# Run migrations in background
+RUN php artisan migrate --force &
 
 # Expose port 80
 EXPOSE 80
