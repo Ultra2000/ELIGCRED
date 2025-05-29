@@ -36,11 +36,21 @@ RUN composer install --no-interaction --no-dev --optimize-autoloader
 RUN php artisan key:generate
 
 # Set permissions
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
+    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Configure Apache
-RUN a2enmod rewrite
+RUN a2enmod rewrite headers expires
 COPY docker/apache.conf /etc/apache2/sites-available/000-default.conf
+
+# Create database directory and set permissions
+RUN mkdir -p /var/www/html/database \
+    && touch /var/www/html/database/database.sqlite \
+    && chown -R www-data:www-data /var/www/html/database \
+    && chmod -R 775 /var/www/html/database
+
+# Run migrations
+RUN php artisan migrate --force
 
 # Expose port 80
 EXPOSE 80
