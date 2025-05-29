@@ -19,7 +19,7 @@ return new class extends Migration
             $table->decimal('montant_sollicite', 15, 2);
             $table->integer('duree_sollicitee');
             $table->string('periodicite_sollicitee');
-            $table->decimal('score_ia', 5, 2);
+            $table->decimal('score_ia', 5, 2)->nullable();
             $table->decimal('montant_propose', 15, 2)->nullable();
             $table->integer('duree_proposee')->nullable();
             $table->string('periodicite_proposee')->nullable();

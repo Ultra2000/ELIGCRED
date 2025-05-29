@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\Storage;
 
 class Dossier extends Model
 {
@@ -50,6 +51,9 @@ class Dossier extends Model
         'actif_net',
         // Historique des crédits
         'total_credits',
+        'nombre_credits_anterieurs',
+        'montant_moyen_credits_anterieurs',
+        'echeancier_respecte',
         // Évaluation du besoin
         'cout_total_projet',
         'besoin_financement',
@@ -73,6 +77,9 @@ class Dossier extends Model
         'commentaires_ac',
         'commentaires_ctc1',
         'commentaires_ctc2',
+        'statut_ia',
+        'montant_predit',
+        'duree_predite'
     ];
 
     protected $casts = [
@@ -83,9 +90,26 @@ class Dossier extends Model
         'date_dernier_avis' => 'datetime',
     ];
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::deleting(function ($dossier) {
+            // Supprimer le fichier Excel associé
+            if ($dossier->fichier_excel_path) {
+                Storage::disk('public')->delete($dossier->fichier_excel_path);
+            }
+        });
+    }
+
     public function avis()
     {
         return $this->hasMany(Avis::class);
+    }
+
+    public function evaluationIA()
+    {
+        return $this->hasOne(EvaluationIA::class);
     }
 
     public function getNombreAvisAttribute()
@@ -110,20 +134,32 @@ class Dossier extends Model
     public function updateStatutSelonAvis()
     {
         $avisTotal = $this->avis()->count();
+        
+        // Si on n'a pas encore 5 avis, on ne fait rien
         if ($avisTotal < 5) {
-            return; // On attend d'avoir 5 avis
+            return;
         }
+
+        // Récupérer la date du dernier avis
+        $dernierAvis = $this->avis()->latest()->first();
+        $this->date_dernier_avis = $dernierAvis->created_at;
+
+        // Compter les avis favorables et défavorables
         $favorables = $this->avis()->where('avis', 'FAVORABLE')->count();
         $defavorables = $this->avis()->where('avis', 'NON_FAVORABLE')->count();
-        $dernierAvis = $this->avis()->latest()->first();
-        $this->date_dernier_avis = $dernierAvis ? $dernierAvis->created_at : now();
+
+        // Mettre à jour le statut selon les règles
         if ($favorables === 5) {
+            // Tous les avis sont favorables
             $this->statut = 'PROVISOIREMENT_VALIDER';
         } elseif ($defavorables === 5) {
+            // Tous les avis sont défavorables
             $this->statut = 'REJETER';
         } elseif ($defavorables >= 1) {
+            // Au moins un avis défavorable
             $this->statut = 'AJOURNER';
         }
+
         $this->save();
     }
 

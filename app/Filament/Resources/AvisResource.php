@@ -24,22 +24,32 @@ class AvisResource extends Resource
     protected static ?string $modelLabel = 'Avis';
     protected static ?string $pluralModelLabel = 'Avis';
 
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        $query = parent::getEloquentQuery();
+
+        // Ne montrer que les avis de l'utilisateur connecté
+        if (auth()->user()->hasRole('mcc')) {
+            $query->where('user_id', auth()->id());
+        }
+
+        return $query;
+    }
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Forms\Components\Select::make('dossier_id')
-                    ->relationship('dossier', 'numero_dossier')
+                    ->relationship('dossier', 'numero_dossier', function ($query) {
+                        return $query->where('statut', 'SOUMIS');
+                    })
                     ->required()
                     ->searchable()
                     ->preload()
                     ->label('Dossier'),
-                Forms\Components\Select::make('user_id')
-                    ->relationship('user', 'name')
-                    ->required()
-                    ->searchable()
-                    ->preload()
-                    ->label('Utilisateur'),
+                Forms\Components\Hidden::make('user_id')
+                    ->default(fn () => auth()->id()),
                 Forms\Components\Select::make('avis')
                     ->required()
                     ->options([
@@ -54,6 +64,64 @@ class AvisResource extends Resource
 
     public static function table(Table $table): Table
     {
+        // Si c'est le président, on affiche une vue différente
+        if (auth()->user()->hasRole('president')) {
+            return $table
+                ->query(
+                    \App\Models\Dossier::query()
+                        ->whereHas('avis')
+                        ->withCount('avis')
+                        ->withCount(['avis as avis_favorables' => function ($query) {
+                            $query->where('avis', 'FAVORABLE');
+                        }])
+                        ->withCount(['avis as avis_non_favorables' => function ($query) {
+                            $query->where('avis', 'NON_FAVORABLE');
+                        }])
+                        ->withMax('avis', 'created_at')
+                )
+                ->columns([
+                    Tables\Columns\TextColumn::make('numero_dossier')
+                        ->searchable()
+                        ->sortable()
+                        ->label('Numéro du dossier'),
+                    Tables\Columns\TextColumn::make('nom_client')
+                        ->searchable()
+                        ->sortable()
+                        ->label('Nom du client'),
+                    Tables\Columns\TextColumn::make('prenom_client')
+                        ->searchable()
+                        ->sortable()
+                        ->label('Prénom du client'),
+                    Tables\Columns\TextColumn::make('avis_count')
+                        ->label('Nombre d\'avis'),
+                    Tables\Columns\TextColumn::make('avis_favorables')
+                        ->label('Avis favorables'),
+                    Tables\Columns\TextColumn::make('avis_non_favorables')
+                        ->label('Avis non favorables'),
+                    Tables\Columns\TextColumn::make('avis_max_created_at')
+                        ->dateTime()
+                        ->sortable()
+                        ->label('Dernier avis'),
+                ])
+                ->actions([
+                    Tables\Actions\Action::make('voir_details')
+                        ->label('Voir les détails')
+                        ->icon('heroicon-o-eye')
+                        ->modalContent(function ($record) {
+                            return new \Illuminate\Support\HtmlString(
+                                view('filament.resources.avis.modal-content', [
+                                    'dossier' => $record,
+                                    'avis' => $record->avis()->with('user')->get(),
+                                ])->render()
+                            );
+                        })
+                        ->modalHeading(fn ($record) => 'Détails du dossier ' . $record->numero_dossier)
+                        ->modalWidth('3xl'),
+                ])
+                ->bulkActions([]);
+        }
+
+        // Pour les membres du comité, on garde l'affichage normal
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('dossier.numero_dossier')
@@ -63,7 +131,7 @@ class AvisResource extends Resource
                 Tables\Columns\TextColumn::make('user.name')
                     ->searchable()
                     ->sortable()
-                    ->label('Utilisateur'),
+                    ->label('Membre du comité'),
                 Tables\Columns\TextColumn::make('avis')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
@@ -71,19 +139,10 @@ class AvisResource extends Resource
                         'NON_FAVORABLE' => 'danger',
                     })
                     ->label('Avis'),
-                Tables\Columns\TextColumn::make('observations')
-                    ->limit(50)
-                    ->label('Observations'),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->label('Date de création'),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->label('Date de modification'),
+                    ->label('Date de l\'avis'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('avis')

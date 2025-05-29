@@ -12,6 +12,7 @@ use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class ChargerDossier extends Page
 {
@@ -76,32 +77,66 @@ class ChargerDossier extends Page
         $worksheet = $spreadsheet->getActiveSheet();
 
         // Récupérer les données du fichier Excel
-        $numeroDossier = trim($worksheet->getCell('D6')->getValue());
-        $guichet = trim($worksheet->getCell('D7')->getValue());
-        $codeAdherent = trim($worksheet->getCell('D8')->getValue());
+        $numeroDossier = trim($worksheet->getCell('B5')->getValue());
+        $guichet = trim($worksheet->getCell('B6')->getValue());
+        $codeAdherent = trim($worksheet->getCell('B13')->getValue());
         $datePriseInfo = trim($worksheet->getCell('D9')->getValue());
         $renouvellement = trim($worksheet->getCell('D10')->getValue());
         $activiteFinancer = trim($worksheet->getCell('D11')->getValue());
         
-        // Montant sollicité (A13:B13)
-        $montantSollicite = (float)trim($worksheet->getCell('A13')->getValue());
+        // Montant sollicité (A10)
+        $montantSollicite = $worksheet->getCell('A10')->getValue();
+        Log::info('Valeur brute du montant sollicité : ' . print_r($montantSollicite, true));
         
+        if (empty($montantSollicite) || $montantSollicite === null) {
+            Notification::make()
+                ->title('Erreur')
+                ->body('Le montant sollicité est manquant dans la cellule A10')
+                ->danger()
+                ->send();
+            return;
+        }
+
+        // Nettoyer et convertir le montant
+        $montantSollicite = str_replace([' ', '€', 'FCFA', 'F', 'CFA'], '', $montantSollicite);
+        $montantSollicite = str_replace(',', '.', $montantSollicite);
+        $montantSollicite = preg_replace('/[^0-9.]/', '', $montantSollicite);
+        Log::info('Montant sollicité après nettoyage : ' . $montantSollicite);
+        
+        // Vérifier si c'est une formule Excel
+        if (is_string($montantSollicite) && strpos($montantSollicite, '=') === 0) {
+            $montantSollicite = $worksheet->getCell('A10')->getCalculatedValue();
+            Log::info('Montant sollicité après calcul de formule : ' . $montantSollicite);
+        }
+        
+        if (!is_numeric($montantSollicite)) {
+            Notification::make()
+                ->title('Erreur')
+                ->body('Le montant sollicité dans la cellule A10 n\'est pas un nombre valide. Valeur trouvée : ' . $montantSollicite)
+                ->danger()
+                ->send();
+            return;
+        }
+
+        $montantSollicite = (float)$montantSollicite;
+        Log::info('Montant sollicité final : ' . $montantSollicite);
+
         // Gestion des valeurs manquantes pour la durée et la périodicité
         $dureeSollicitee = $worksheet->getCell('C13')->getValue();
-        \Log::info('Valeur brute de la durée sollicitée : ' . print_r($dureeSollicitee, true));
+        Log::info('Valeur brute de la durée sollicitée : ' . print_r($dureeSollicitee, true));
         
         if (empty($dureeSollicitee) || $dureeSollicitee === null) {
             $dureeSollicitee = 12; // Durée par défaut de 12 mois
-            \Log::info('Utilisation de la durée par défaut : 12 mois');
+            Log::info('Utilisation de la durée par défaut : 12 mois');
         } else {
             // Nettoyer la valeur et s'assurer qu'elle est numérique
             $dureeSollicitee = preg_replace('/[^0-9]/', '', $dureeSollicitee);
             if (empty($dureeSollicitee)) {
                 $dureeSollicitee = 12;
-                \Log::info('La durée nettoyée est vide, utilisation de la durée par défaut : 12 mois');
+                Log::info('La durée nettoyée est vide, utilisation de la durée par défaut : 12 mois');
             } else {
                 $dureeSollicitee = (int)$dureeSollicitee;
-                \Log::info('Durée sollicitée convertie en entier : ' . $dureeSollicitee);
+                Log::info('Durée sollicitée convertie en entier : ' . $dureeSollicitee);
             }
         }
 
@@ -112,52 +147,123 @@ class ChargerDossier extends Page
         }
 
         // Informations de l'emprunteur
-        $nomClient = trim($worksheet->getCell('B17')->getValue());
-        $prenomClient = trim($worksheet->getCell('B18')->getValue());
-        $sexe = trim($worksheet->getCell('D19')->getValue());
-        $dateNaissance = trim($worksheet->getCell('B20')->getValue());
-        $lieuNaissance = trim($worksheet->getCell('F20')->getValue());
-        $adresse = trim($worksheet->getCell('B21')->getValue());
-        $residenceDepuis = trim($worksheet->getCell('F21')->getValue());
-        $metier = trim($worksheet->getCell('B22')->getValue());
-        $activites = trim($worksheet->getCell('F22')->getValue());
-        $numeroIFU = trim($worksheet->getCell('C24')->getValue());
+        $nomClient = trim($worksheet->getCell('B14')->getValue());
+        $prenomClient = trim($worksheet->getCell('B15')->getValue());
+        $sexe = trim($worksheet->getCell('E16')->getValue());
+        $dateNaissance = trim($worksheet->getCell('C17')->getValue());
+        $lieuNaissance = trim($worksheet->getCell('F17')->getValue());
+        $adresse = trim($worksheet->getCell('B18')->getValue());
+        $residenceDepuis = trim($worksheet->getCell('E19')->getValue());
+        $metier = trim($worksheet->getCell('B20')->getValue());
+        $activites = trim($worksheet->getCell('F20')->getValue());
+        $numeroIFU = trim($worksheet->getCell('C22')->getValue());
         $situationMatrimoniale = trim($worksheet->getCell('D26')->getValue());
         $personnesCharge = (int)trim($worksheet->getCell('D27')->getValue());
         $reference = trim($worksheet->getCell('D30')->getValue());
 
         // Informations sur l'entreprise
-        $adresseEntreprise = trim($worksheet->getCell('D33')->getValue());
+        $adresseEntreprise = trim($worksheet->getCell('C32')->getValue());
         $niveauConcurrence = trim($worksheet->getCell('D40')->getValue());
 
         // État des produits et charges
         $salaireNet = (float)trim($worksheet->getCell('C45')->getValue());
-        $totalRevenus = (float)trim($worksheet->getCell('C53')->getValue());
-        $totalDepenses = (float)trim($worksheet->getCell('F53')->getValue());
-        $actifNet = (float)trim($worksheet->getCell('F54')->getValue());
+        $totalRevenus = $worksheet->getCell('C53')->getCalculatedValue();
+        $totalDepenses = $worksheet->getCell('F53')->getCalculatedValue();
+        $actifNet = $totalRevenus - $totalDepenses;
+
+        // Log des valeurs pour debug
+        Log::info('Calcul de l\'actif net :', [
+            'total_revenus' => $totalRevenus,
+            'total_depenses' => $totalDepenses,
+            'actif_net_calcule' => $actifNet
+        ]);
 
         // Historique des crédits
-        $totalCredits = (float)trim($worksheet->getCell('D67')->getValue());
+        $totalCredits = $worksheet->getCell('D67')->getValue();
+        $nombreCreditsAnterieurs = $worksheet->getCell('A59')->getValue();
+        $montantMoyenCreditsAnterieurs = $worksheet->getCell('B59')->getValue();
+        $echeancierRespecte = $worksheet->getCell('C59')->getValue();
+
+        Log::info('Historique des crédits :', [
+            'total_credits' => $totalCredits,
+            'nombre_credits_anterieurs' => $nombreCreditsAnterieurs,
+            'montant_moyen_credits_anterieurs' => $montantMoyenCreditsAnterieurs,
+            'echeancier_respecte' => $echeancierRespecte
+        ]);
+
+        // Nettoyer et convertir les valeurs numériques
+        $totalCredits = is_numeric($totalCredits) ? (float)str_replace([' ', ','], ['', '.'], $totalCredits) : 0;
+        $nombreCreditsAnterieurs = is_numeric($nombreCreditsAnterieurs) ? (int)$nombreCreditsAnterieurs : 0;
+        $montantMoyenCreditsAnterieurs = is_numeric($montantMoyenCreditsAnterieurs) ? (float)str_replace([' ', ','], ['', '.'], $montantMoyenCreditsAnterieurs) : 0;
+        $echeancierRespecte = trim($echeancierRespecte);
+
+        // Calculer un score basé sur l'historique des crédits
+        $scoreHistorique = 0;
+        
+        // Score basé sur le nombre de crédits antérieurs (max 30 points)
+        if ($nombreCreditsAnterieurs > 0) {
+            $scoreHistorique += min(30, $nombreCreditsAnterieurs * 10);
+        }
+        
+        // Score basé sur le respect de l'échéancier (max 40 points)
+        if (strtoupper($echeancierRespecte) === 'OUI') {
+            $scoreHistorique += 40;
+        } elseif (strtoupper($echeancierRespecte) === 'PARTIELLEMENT') {
+            $scoreHistorique += 20;
+        }
+        
+        // Score basé sur le montant moyen des crédits (max 30 points)
+        if ($montantMoyenCreditsAnterieurs > 0) {
+            $ratioMontant = $montantMoyenCreditsAnterieurs / $montantSollicite;
+            if ($ratioMontant >= 1) {
+                $scoreHistorique += 30;
+            } elseif ($ratioMontant >= 0.5) {
+                $scoreHistorique += 20;
+            } elseif ($ratioMontant > 0) {
+                $scoreHistorique += 10;
+            }
+        }
+
+        Log::info('Score historique calculé : ' . $scoreHistorique);
 
         // Évaluation du besoin
-        $coutTotalProjet = (float)trim($worksheet->getCell('F80')->getValue());
-        $besoinFinancement = (float)trim($worksheet->getCell('C85')->getValue());
+        $coutTotalProjet = $worksheet->getCell('F72')->getCalculatedValue();
+        $besoinFinancement = $worksheet->getCell('C77')->getCalculatedValue();
 
         // Garanties
         $totalGaranties = (float)trim($worksheet->getCell('C96')->getValue());
 
         // Bilan de l'entreprise
-        $encaisse = (float)trim($worksheet->getCell('C101')->getValue());
-        $totalActif = (float)trim($worksheet->getCell('C112')->getValue());
-        $totalPassif = (float)trim($worksheet->getCell('F112')->getValue());
+        $encaisse = $worksheet->getCell('C95')->getValue();
+        $totalActif = $worksheet->getCell('C106')->getCalculatedValue();
+        $totalPassif = $worksheet->getCell('F106')->getCalculatedValue();
+
+        // Log des valeurs brutes du bilan entreprise
+        Log::info('Valeurs brutes du bilan entreprise :', [
+            'encaisse_raw' => $encaisse,
+            'total_actif_raw' => $totalActif,
+            'total_passif_raw' => $totalPassif
+        ]);
+
+        // Nettoyer et convertir les valeurs
+        $encaisse = (float)str_replace([' ', ','], ['', '.'], $encaisse);
+        $totalActif = (float)str_replace([' ', ','], ['', '.'], $totalActif);
+        $totalPassif = (float)str_replace([' ', ','], ['', '.'], $totalPassif);
+
+        // Log des valeurs nettoyées du bilan entreprise
+        Log::info('Valeurs nettoyées du bilan entreprise :', [
+            'encaisse_cleaned' => $encaisse,
+            'total_actif_cleaned' => $totalActif,
+            'total_passif_cleaned' => $totalPassif
+        ]);
 
         // Compte d'exploitation
-        $vente = (float)trim($worksheet->getCell('C118')->getValue());
-        $surplusNet = (float)trim($worksheet->getCell('C130')->getValue());
+        $vente = (float)trim($worksheet->getCell('C111')->getValue());
+        $surplusNet = $worksheet->getCell('C123')->getCalculatedValue();
 
         // Avis et décisions
-        $avisAC = trim($worksheet->getCell('D150')->getValue());
-        $montantApprouveAC = (float)trim($worksheet->getCell('C151')->getValue());
+        $avisAC = trim($worksheet->getCell('C138')->getValue());
+        $montantApprouveAC = (float)trim($worksheet->getCell('B139')->getValue());
         $avisCTC1 = trim($worksheet->getCell('D158')->getValue());
         $montantApprouveCTC1 = (float)trim($worksheet->getCell('C159')->getValue());
         $avisCTC2 = trim($worksheet->getCell('D165')->getValue());
@@ -171,10 +277,10 @@ class ChargerDossier extends Page
         // Vérifier que les champs obligatoires ne sont pas vides
         $champsManquants = [];
         
-        if (empty($numeroDossier)) $champsManquants[] = 'Numéro de dossier (D6)';
-        if (empty($nomClient)) $champsManquants[] = 'Nom du client (B17)';
-        if (empty($prenomClient)) $champsManquants[] = 'Prénom du client (B18)';
-        if (empty($montantSollicite)) $champsManquants[] = 'Montant sollicité (A13:B13)';
+        if (empty($numeroDossier)) $champsManquants[] = 'Numéro de dossier (B5)';
+        if (empty($nomClient)) $champsManquants[] = 'Nom du client (B14)';
+        if (empty($prenomClient)) $champsManquants[] = 'Prénom du client (B15)';
+        if (empty($montantSollicite)) $champsManquants[] = 'Montant sollicité (A10)';
         if (empty($dureeSollicitee)) $champsManquants[] = 'Durée sollicitée (C13)';
         if (empty($periodiciteSollicitee)) $champsManquants[] = 'Périodicité sollicitée (E13:G13)';
 
@@ -188,11 +294,78 @@ class ChargerDossier extends Page
         }
 
         // TODO: Appel IA pour calculer score, montant, durée, périodicité
-        // Exemple fictif :
-        $score = 85;
-        $montantPropose = 10000;
-        $dureeProposee = 12;
-        $periodiciteProposee = 'MENSUEL';
+        // On initialise le score à 0, il sera calculé par l'IA
+        $score = 0;
+        $montantPropose = null;
+        $dureeProposee = null;
+        $periodiciteProposee = null;
+
+        // Convertir les dates Excel en dates PHP
+        try {
+            $datePriseInfo = $worksheet->getCell('D9')->getValue();
+            Log::info('Valeur brute de la date de prise d\'info : ' . print_r($datePriseInfo, true));
+            
+            if (is_numeric($datePriseInfo)) {
+                $datePriseInfo = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($datePriseInfo);
+            } else {
+                // Essayer de parser la date si elle est au format texte
+                $datePriseInfo = \DateTime::createFromFormat('d/m/Y', $datePriseInfo);
+                if (!$datePriseInfo) {
+                    $datePriseInfo = null;
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la conversion de la date de prise d\'info : ' . $e->getMessage());
+            $datePriseInfo = null;
+        }
+
+        try {
+            $dateNaissance = $worksheet->getCell('C17')->getValue();
+            Log::info('Valeur brute de la date de naissance : ' . print_r($dateNaissance, true));
+            
+            if (is_numeric($dateNaissance)) {
+                $dateNaissance = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($dateNaissance);
+            } else {
+                // Essayer de parser la date si elle est au format texte
+                $dateNaissance = \DateTime::createFromFormat('d/m/Y', $dateNaissance);
+                if (!$dateNaissance) {
+                    $dateNaissance = null;
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la conversion de la date de naissance : ' . $e->getMessage());
+            $dateNaissance = null;
+        }
+        
+        // Nettoyer le sexe
+        $sexe = strtoupper(trim(str_replace(['Sexe :', ':', ' '], '', $sexe)));
+        if (!in_array($sexe, ['M', 'F'])) {
+            $sexe = null;
+        }
+        
+        // Convertir les valeurs numériques en float
+        $montantSollicite = (float)str_replace([' ', ','], ['', '.'], $montantSollicite);
+        $salaireNet = (float)str_replace([' ', ','], ['', '.'], $salaireNet);
+        $totalRevenus = (float)str_replace([' ', ','], ['', '.'], $totalRevenus);
+        $totalDepenses = (float)str_replace([' ', ','], ['', '.'], $totalDepenses);
+        $actifNet = (float)str_replace([' ', ','], ['', '.'], $actifNet);
+        $totalCredits = (float)str_replace([' ', ','], ['', '.'], $totalCredits);
+        $coutTotalProjet = (float)str_replace([' ', ','], ['', '.'], $coutTotalProjet);
+        $besoinFinancement = (float)str_replace([' ', ','], ['', '.'], $besoinFinancement);
+        $totalGaranties = (float)str_replace([' ', ','], ['', '.'], $totalGaranties);
+        $encaisse = (float)str_replace([' ', ','], ['', '.'], $encaisse);
+        $totalActif = (float)str_replace([' ', ','], ['', '.'], $totalActif);
+        $totalPassif = (float)str_replace([' ', ','], ['', '.'], $totalPassif);
+        $vente = (float)str_replace([' ', ','], ['', '.'], $vente);
+        $surplusNet = (float)str_replace([' ', ','], ['', '.'], $surplusNet);
+        $montantApprouveAC = (float)str_replace([' ', ','], ['', '.'], $montantApprouveAC);
+        $montantApprouveCTC1 = (float)str_replace([' ', ','], ['', '.'], $montantApprouveCTC1);
+        $montantApprouveCTC2 = (float)str_replace([' ', ','], ['', '.'], $montantApprouveCTC2);
+
+        // Nettoyer les avis
+        $avisAC = trim(str_replace('=', '', $avisAC));
+        $avisCTC1 = trim(str_replace(['=', '+', 'D151'], '', $avisCTC1));
+        $avisCTC2 = trim(str_replace('=', '', $avisCTC2));
 
         $dossier = new \App\Models\Dossier();
         $dossier->numero_dossier = $numeroDossier;
@@ -240,6 +413,9 @@ class ChargerDossier extends Page
 
         // Historique des crédits
         $dossier->total_credits = $totalCredits;
+        $dossier->nombre_credits_anterieurs = $nombreCreditsAnterieurs;
+        $dossier->montant_moyen_credits_anterieurs = $montantMoyenCreditsAnterieurs;
+        $dossier->echeancier_respecte = $echeancierRespecte;
 
         // Évaluation du besoin
         $dossier->cout_total_projet = $coutTotalProjet;
