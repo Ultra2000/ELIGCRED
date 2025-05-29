@@ -23,17 +23,14 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy composer files first for better caching
-COPY composer.json composer.lock ./
-
-# Install dependencies
-RUN composer install --no-interaction --no-dev --optimize-autoloader
-
-# Copy the rest of the application
+# Copy the entire application
 COPY . .
 
 # Copy .env file
 COPY .env.example .env
+
+# Install dependencies with memory limit
+RUN composer install --no-interaction --no-dev --optimize-autoloader --no-scripts
 
 # Generate key
 RUN php artisan key:generate
