@@ -1,7 +1,7 @@
 # ELIGCRED
 
 **ELIGCRED** est une application web développée avec le framework Laravel (PHP).  
-Le projet vise à offrir une gestion efficace des crédits et de l’éligibilité, probablement dans un contexte financier, bancaire ou associatif.  
+Le projet vise à offrir une gestion efficace des crédits et de l’éligibilité, dans un contexte financier, bancaire ou associatif.  
 L’application exploite la puissance de Laravel pour garantir sécurité, performance et évolutivité.
 
 ## Fonctionnalités principales (à adapter selon ton projet réel)
